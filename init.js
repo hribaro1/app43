@@ -420,8 +420,8 @@ let configtimer = Timer.set(3600000, true, function() {
 let boosttimer = Timer.set(appboosttime, true, function() {
  // define boosttimer
 }, null);
-print("Creating initial periodic boostimer: ", boosttimer);
-
+print("Creating and deleting initial periodic boostimer: ", boosttimer);
+Timer.del(boosttimer)
 
 
 MQTT.sub(topicsubconfig, function(conn, topic, msg) {
@@ -469,23 +469,7 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
  MQTT.sub(topicsubcommand, function(conn, topic, msg) {
 //  {"allConnected": true, “speed”: 2, “auto”: false, “boost”: false, “night”: false, “summer”: false, "boostCountDown":3600000}
   let obj = JSON.parse(msg) || {};
-  
-  // takoj izračunamo in postavimo hitrost ventilatorja zato, da je hiter odziv
     speed=obj.speed;
-
-  // setSpeed();
-  // PWM.set(apppin, 1000, speedpwm/100);  
- // konec takojšnje postavitve na določeno hitrost oziroma odzivnost ventilatorja
-
-/*
-  Cfg.set({app: {pwm: {val: obj.speed}}});
-  Cfg.set({app: {mode: {avto: obj.auto}}});
-  Cfg.set({app: {mode: {night: obj.night}}});
-  Cfg.set({app: {mode: {summer: obj.summer}}});
-  Cfg.set({app: {mode: {boost: obj.boost}}});
-  Cfg.set({app: {boost: {time: obj.boostCountDown}}});
-
-*/
  
   print ("allConnected: ", obj.allConnected, "Speed: ", obj.speed, "Auto ", obj.auto, "Boost ", obj.boost, "Night ", obj.night, "Summer ", obj.summer, "Countdown", obj.boostCountDown);
 
@@ -502,45 +486,34 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
   };
 
 // shrani prejšnjo hitrost preden je bil boost
-
   if (obj.boost){
      // postavitev hitrosti na 4 v bazi podatkov ce je izbran boost 
-      appmodeboost = true;
-     // oldspeed = Cfg.get('app.old.speed');
-     // Cfg.set({app: {boost: {time: obj.boostCountDown}}});
       appboosttime = obj.boostCountDown;
       print ("Set oldsped: ", oldspeed, "Set countdown: ", appboosttime);
 
-      if (speed !== 4) {
+      if (speed!==4) {
         oldspeed=speed;
         print("Oldspeed set to ", oldspeed);
-        speed = 4; 
+        //speed = 4; 
         print ("Postavi hitrost na 4 na events/fan: ", speed);
-        let msg = JSON.stringify({domId: apphome, userId: appuser, boost: obj.boost, speed: speed});
+        let msg = JSON.stringify({domId: apphome, userId: appuser, boost: obj.boost, speed: 4});
         print(topicpubevents, '->', msg);
-        MQTT.pub(topicpubevents, msg, 1);
+        MQTT.pub(topicpubevents, msg, 1);  
       }
 
-      SetOldSpeed();
-
-      // one time timer to set boost to false and set back oldspeed
-     // print("Deleting boostimer within if obj.boost true clause - server: ", boosttimer);
-     // Timer.del(boosttimer);
-     // print("Zbrisan boosttimer: ", boosttimer);
-      boosttimer = Timer.set(appboosttime, false, function() {
-        speedpwm = 99-oldspeed-speedpwm;
-        print("Boost time ended. Setting BOOST OFF AND speed back to previous speed:", oldspeed);
-        let msg = JSON.stringify({domId: apphome, userId: appuser, boost: false, speed: oldspeed});
-        print(topicpubevents, '->', msg);
-        MQTT.pub(topicpubevents, msg, 1);
-
-        //boosttimer = Timer.set(appboosttime, true, function() {
-          //start new periodic boosttimer
-        //}, null);
-        //print("Creating new boosttimer within onetimer - server: ", boosttimer);
-
-      }, null);
-      print("Kreiran nov boosttimer za one time boost OFF: ", boosttimer);
+      if (speed===4 && !appmodeboost) {
+        boosttimer = Timer.set(appboosttime, false, function() {
+          SetOldSpeed();
+          speedpwm = 99-oldspeed-speedpwm;
+          print("Boost time ended. Setting BOOST OFF AND speed back to previous speed:", oldspeed);
+          let msg = JSON.stringify({domId: apphome, userId: appuser, boost: false, speed: oldspeed});
+          print(topicpubevents, '->', msg);
+          MQTT.pub(topicpubevents, msg, 1);
+        }, null);
+        print("Kreiran nov boosttimer za one time boost OFF: ", boosttimer);
+        appmodeboost = true;
+        print("Postavil appmodeboost na TRUE")
+      }
 
   }else{
     Timer.del(boosttimer);
@@ -552,10 +525,6 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
       let msg = JSON.stringify({domId: apphome, userId: appuser, boost: false, speed: oldspeed});
       print(topicpubevents, '->', msg);
       MQTT.pub(topicpubevents, msg, 1);
-      //boosttimer = Timer.set(appboosttime, true, function() {
-        //start new periodic boosttimer
-      //}, null);
-      //print("Creating periodic boosttimer within else obj.boost else clause - server: ", boosttimer);  
     }
     oldspeed = obj.speed;
     print("Oldspeed set to ", oldspeed);
@@ -682,34 +651,22 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
     //Cfg.set(args);
     print(JSON.stringify(args));
     appmodeboost = args.app.mode.boost;
-   // print(JSON.stringify(args));
-    //oldspeed = Cfg.get('app.old.speed');
-    //če je true postavi hitrost na 4
+
     if (appmodeboost){
       print("Ventilator HITROST == 4 --> BOOST");
       //Cfg.set({app: {pwm: {val: 4}}});
       speed=4;
-    //nastavi boost timer, da ugaoost sne oziroma prestavi nazaj na oldspeed
-     // print("Deleting boostimer within if boost true clause - html: ", boosttimer);
-      //Timer.del(boosttimer);
+
       boosttimer = Timer.set(appboosttime, false, function() {
         //onetime boosttimer
         appmodeboost=false;
         speed = oldspeed;
-        //Cfg.set({app: {mode: {boost: false}}});
-        //Cfg.set({app: {pwm: {val: oldspeed}}});
-        // oldspeed=Cfg.get('app.old.speed');
         SetOldSpeed();
         speed=oldspeed;
         print("Boost je koncan--> boost set to: ", appmodeboost);
         print("PWM set to config speed:", speedpwm);
         PWM.set(apppin, 1000, speedpwm/100);
         print("ONETIME boosttimer elapsed - html: ", boosttimer);
-     //   boosttimer = Timer.set(appboosttime, true, function() {
-          //start new periodic boosttimer
-     //   }, null);
-     //   print("Creating new boosttimer within onetimer - html: ", boosttimer);
-
         
         if (MQTT.isConnected()){
           let msg = JSON.stringify({domId: apphome, userId: appuser, boost: appmodeboost, auto: appmodeavto, summer: appmodesummer, night: appmodenight, speed: speed});   
@@ -729,15 +686,8 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
       print("Deleted boosttimer within else if clause - html: ", boosttimer);
       print("Ventilator HITROST == BOOST--> OLDSPEED");
       speed= oldspeed;
-      //Cfg.set({app: {pwm: {val: speed}}});
-      //boosttimer = Timer.set(appboosttime, true, function() {
-        //start new periodic boosttimer
-     // }, null);
 
-      //print("Creating new periodic boosttimer within else if clause - html: ", boosttimer);
-      
     };
-
 
     setSpeed();
     print ("Nastavitev hitrosti - speedpwm: ", speedpwm);
@@ -764,8 +714,7 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
   });
 
   RPC.addHandler('ControlAuto', function(args) {
-    //shrani parameter
-    //Cfg.set(args);
+
     appmodeavto = args.app.mode.avto;
     print(JSON.stringify(args));
     
@@ -782,10 +731,7 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
   });
 
   RPC.addHandler('ControlSpeed', function(args) {
-    //shrani in nastavi novo hitrost
-    //Cfg.set(args);
-    //nastavi tudi parameter old speed na isto vrednost
-    //Cfg.set({app: {old: {speed: args.app.pwm.val}}});
+
 
     if (appmodeboost){
       speed=4;
@@ -824,8 +770,7 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
 
 
   RPC.addHandler('ControlParam', function(args) {
-    //shrani in nastavi novo hitrost
-    //Cfg.set(args);
+
     apppwmgra = args.app.pwm.gra;
     apppwmnight = args.app.pwm.night;
   //  appnightspeed = args.app.night.speed;
@@ -840,10 +785,7 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
   });
 
   RPC.addHandler('ControlParam1', function(args) {
-    //shrani in nastavi novo hitrost
-    //Cfg.set(args);
-  //  apppwmgra = args.app.pwm.gra;
-  //  apppwmnight = args.app.pwm.night;
+
     appnightspeed = args.app.night.speed;
 
     print(JSON.stringify(args));
@@ -923,10 +865,6 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
    
         if (state0===0 && state1===1 && state2===0 && state3===0) {
           print("Izkljuci ventilator gre na OFF");
-          //shrani in nastavi novo hitrost
-          //nastavi tudi parameter old speed na isto vrednost
-          //Cfg.set({app: {pwm: {val: 0}}});
-          //Cfg.set({app: {old: {speed: 0}}});
           if (appmodeboost){
             speed = 4;
             oldspeed = 0;
@@ -964,10 +902,7 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
 
         if (state0===0 && state1===0 && state2===1 && state3===0) {
           print("Ventilator HITROST == 1")
-          //shrani in nastavi novo hitrost
-          //nastavi tudi parameter old speed na isto vrednost
-          //Cfg.set({app: {pwm: {val: 1}}});
-          //Cfg.set({app: {old: {speed: 1}}});
+
           if (appmodeboost){
             speed = 4;
             oldspeed = 1;
@@ -1005,10 +940,7 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
 
         if (state0===1 && state1===0 && state2===1 && state3===0) {
           print("Ventilator HITROST == 2")
-          //shrani in nastavi novo hitrost
-          //nastavi tudi parameter old speed na isto vrednost
-          //Cfg.set({app: {pwm: {val: 2}}});
-          //Cfg.set({app: {old: {speed: 2}}});
+
           if (appmodeboost){
             speed = 4;
             oldspeed = 2;
@@ -1045,10 +977,7 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
 
         if (state0===0 && state1===1 && state2===1 && state3===0) {
           print("Ventilator HITROST == 3")
-          //shrani in nastavi novo hitrost
-          //nastavi tudi parameter old speed na isto vrednost
-          //Cfg.set({app: {pwm: {val: 3}}});
-          //Cfg.set({app: {old: {speed: 3}}});
+
           if (appmodeboost) {
             speed = 4;
             oldspeed = 3
@@ -1095,41 +1024,22 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
             print("DELETE boosttimer if clause true - remote: ", boosttimer);
             print("BOOST gre na OFF in HITROST == BOOST--> OLDSPEED");
             speed = oldspeed;
-            //Cfg.set({app: {pwm: {val: speed}}});
-
-            //boosttimer = Timer.set(appboosttime, true, function() {
-              //start new periodic boosttimer
-            //}, null);
-            //print("Creating new periodic boostimer within if clause true - remote: ", boosttimer);
-          //konec nastavljanja hitrosti            
 
           }  else {
             print("Ventilator HITROST == 4 --> BOOST");
             //nastavi hitrost 4
             appmodeboost = true;
-            //Cfg.set({app: {mode: {boost: true}}});
-            //Cfg.set({app: {pwm: {val: 4}}});
             speed=4;
-          //konec nastavljanja hitrosti
-            //nastavi boost timer, da ugasne oziroma prestavi nazaj na oldspeed
            // Timer.del(boosttimer);
             boosttimer = Timer.set(appboosttime, false, function() {
               appmodeboost = false;
-
-              //Cfg.set({app: {mode: {boost: false}}});
-              //Cfg.set({app: {pwm: {val: oldspeed}}});
-              //oldspeed=Cfg.get('app.old.speed');
               SetOldSpeed();
               speed=oldspeed;
               print("Boost je koncan--> boost set to: ", appmodeboost);
               print("PWM set to config speed:", speedpwm);
               PWM.set(apppin, 1000, speedpwm/100);
               print("ONETIME boostimer elapsed - remote: ", boosttimer);
-             // boosttimer = Timer.set(appboosttime, true, function() {
-                //start new periodic boosttimer
-             // }, null);
-             // print("Creating new boostimer within onetimer - remote: ", boosttimer);
-              
+
               if (MQTT.isConnected()){
                 let msg = JSON.stringify({domId: apphome, userId: appuser, boost: appmodeboost, auto: appmodeavto, summer: appmodesummer, night: appmodenight, speed: speed});
                 print(topicpubeventshtml, '->', msg);
@@ -1180,9 +1090,6 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
             //Cfg.set({app: {mode: {night: true}}});
           }
           print("Night mode set to: ", appmodenight);
-
-          //če je povezan na strežnik mora objaviti 
-      
               //objavi na strežnik le če je MQTT povezan --> mora objaviti pod user in ne pod ventilator, da se potem vsi sinhronizirajo -> torej na topicpubevents
               if (MQTT.isConnected()) {  
                 let msg = JSON.stringify({domId: apphome, userId: appuser, boost: appmodeboost, auto: appmodeavto, summer: appmodesummer, night: appmodenight, speed: speed});
@@ -1223,13 +1130,11 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
           if (appmodesummer){
             appmodesummer = false;
             apppwmtime = 700000;
-            //Cfg.set({app: {mode: {summer: false}}});
-            //Cfg.set({app: {pwm: {time: 70000}}});
+
           } else {
             appmodesummer = true;
             apppwmtime = 36000000;
-            //Cfg.set({app: {mode: {summer: true}}});
-            //Cfg.set({app: {pwm: {time: 3600000}}});
+
           }
           
           print("Summer mode set to: ", appmodesummer);
