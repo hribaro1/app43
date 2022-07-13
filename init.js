@@ -489,9 +489,17 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
   if (obj.boost){
      // postavitev hitrosti na 4 v bazi podatkov ce je izbran boost 
       appboosttime = obj.boostCountDown;
-      print ("Set oldsped: ", oldspeed, "Set countdown: ", appboosttime);
+      if (appboosttime===0){
+        print ("ne naredim nič ker je BOOST Countdown enak 0, samo BOOST postavim spet na OFF!");
+        let msg = JSON.stringify({domId: apphome, userId: appuser, boost: false, speed: obj.speed});
+        print(topicpubevents, '->', msg);
+        MQTT.pub(topicpubevents, msg, 1);  
 
-      if (speed!==4) {
+      } else {
+
+       print ("Set oldsped: ", oldspeed, "Set countdown: ", appboosttime);
+
+       if (speed!==4) {
         oldspeed=speed;
         print("Oldspeed set to ", oldspeed);
         //speed = 4; 
@@ -499,9 +507,9 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
         let msg = JSON.stringify({domId: apphome, userId: appuser, boost: obj.boost, speed: 4});
         print(topicpubevents, '->', msg);
         MQTT.pub(topicpubevents, msg, 1);  
-      }
+       }
 
-      if (speed===4 && !appmodeboost) {
+       if (speed===4 && !appmodeboost) {
         boosttimer = Timer.set(appboosttime, false, function() {
           SetOldSpeed();
           speedpwm = 99-oldspeed-speedpwm;
@@ -513,8 +521,8 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
         print("Kreiran nov boosttimer za one time boost OFF: ", boosttimer);
         appmodeboost = true;
         print("Postavil appmodeboost na TRUE")
-      }
-
+       }
+     }
   }else{
     Timer.del(boosttimer);
     print("Deleting boostimer: ", boosttimer);
@@ -653,11 +661,18 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
     appmodeboost = args.app.mode.boost;
 
     if (appmodeboost){
-      print("Ventilator HITROST == 4 --> BOOST");
-      //Cfg.set({app: {pwm: {val: 4}}});
-      speed=4;
-
-      boosttimer = Timer.set(appboosttime, false, function() {
+      
+      if (appboosttime===0) {
+        print ("ne naredim nič ker je BOOST Countdown enak 0, samo BOOST postavim spet na OFF!");
+        let msg = JSON.stringify({domId: apphome, userId: appuser, boost: false, speed: oldspeed});
+        print(topicpubevents, '->', msg);
+        MQTT.pub(topicpubevents, msg, 1);  
+      } else {
+      
+       print("Ventilator HITROST == 4 --> BOOST");
+       speed=4;
+  
+       boosttimer = Timer.set(appboosttime, false, function() {
         //onetime boosttimer
         appmodeboost=false;
         speed = oldspeed;
@@ -677,7 +692,7 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
 
       }, null);
       print ("ONE TIME BOOST TIMER CREATED - HTML: ", boosttimer);
-
+     }
 
     } else {
    //če je false postavi  hitrost na oldspeed  
@@ -728,7 +743,14 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
           MQTT.pub(topicpubeventshtml, msg, 1);
         }
 
+
+        RPC.call(RPC.LOCAL, 'Ota.Update', {url: "https://storage.cloud.google.com/b-air-6c15b-firmware-ota/fw.zip"}, function (resp, ud){
+          print ('Response:', JSON.stringify(resp));
+      }, null);
+
   });
+
+
 
   RPC.addHandler('ControlSpeed', function(args) {
 
@@ -1029,9 +1051,16 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
             print("Ventilator HITROST == 4 --> BOOST");
             //nastavi hitrost 4
             appmodeboost = true;
-            speed=4;
+
+            if (appboosttime===0){
+              print ("ne naredim nič ker je BOOST Countdown enak 0, samo BOOST postavim spet na OFF!");
+              let msg = JSON.stringify({domId: apphome, userId: appuser, boost: false, speed: oldspeed});
+              print(topicpubevents, '->', msg);
+              MQTT.pub(topicpubevents, msg, 1);  
+            } else {
+             speed=4;
            // Timer.del(boosttimer);
-            boosttimer = Timer.set(appboosttime, false, function() {
+             boosttimer = Timer.set(appboosttime, false, function() {
               appmodeboost = false;
               SetOldSpeed();
               speed=oldspeed;
@@ -1045,10 +1074,11 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
                 print(topicpubeventshtml, '->', msg);
                 MQTT.pub(topicpubeventshtml, msg, 1);
               };
-            }, null);
-            print("Creating new ONETIME boostimer - remote: ", boosttimer);
+             }, null);
+             print("Creating new ONETIME boostimer - remote: ", boosttimer);
 
           }
+        }
 
           setSpeed();
           print ("Mastavitev hitrosti - speedpwm: ", speedpwm);
@@ -1121,6 +1151,7 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
               }
           // konec nastavitve AUTO
           setStateZero();
+
         };
   
   
