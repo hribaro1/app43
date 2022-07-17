@@ -13,9 +13,12 @@ load('api_adc.js');
 let topicsubconfig = '/devices/' + Cfg.get('device.id') + '/config';
 let topicsubcommand = '/devices/' + Cfg.get('device.id') + '/commands';
 let topicsubcommandreset = '/devices/' + Cfg.get('device.id') + '/commands/reset';
+let topicsubcommandfirmware = '/devices/' + Cfg.get('device.id') + '/commands/firmware';
 let topicpubstate = '/devices/' + Cfg.get('device.id') + '/state';
 let topicpubevents = '/devices/' + Cfg.get('device.id') + '/events/fan';
 let topicpubeventshtml = '/devices/' + Cfg.get('device.id') + '/events/html';
+let topicpubeventsfanstartup = '/devices/' + Cfg.get('device.id') + '/events/fanstartup';
+let topicpubeventsfanconfig = '/devices/' + Cfg.get('device.id') + '/events/fanconfig';
 
 // declare variables
 
@@ -153,8 +156,8 @@ function mqttReEstablished() {
  if (mqttconnectionnew === true){
   if (mqttconnection === false){
     let msg = JSON.stringify({type: "startupfan", domId: apphome, userId: appuser, currentFanSpeed: speed, timeChangeDirection: apppwmtime});
-    print(topicpubstate, '->', msg);
-    MQTT.pub(topicpubstate, msg, 1);
+    print(topicpubeventsfanstartup, '->', msg);
+    MQTT.pub(topicpubeventsfanstartup, msg, 1);
     print ("Objavi podatek na server ker je povezava nazaj --> MQTT connectionnew je: ", mqttconnectionnew);
     mqttconnection = mqttconnectionnew;
   } else {
@@ -445,10 +448,9 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
    // če je uploadConfig true potem objavi nazaj na konfiguracijo --> potegne podatke iz ventialtorja in jih nastavi v fansConfig pod imenom ventilatorja 
       print("uploadFanConfig=true --> NE zapisujem parametre iz serverja na modul");
       let msg = JSON.stringify({type: "fanconfig", domId: apphome, userId: appuser, nightFan: apppwmnight, groupA: apppwmgra, maxNightSpeed: appnightspeed, uploadFanConfig: false});
-      print(topicpubstate, '->', msg);
+      print(topicpubeventsfanconfig, '->', msg);
       print("Objavim nazaj na server parametre iz modula");
-
-      MQTT.pub(topicpubstate, msg, 1);
+      MQTT.pub(topicpubeventsfanconfig, msg, 1);
 
     } else {
       //tukaj pustimo na začetku da se shrani tudi konfiguracija
@@ -594,6 +596,21 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
     Cfg.set({app: {cfg: {rst: true}}});
     Sys.reboot(10000);    
   }, null);
+
+  MQTT.sub(topicsubcommandfirmware, function(conn, topic, msg) {
+    // {"fwupdate": true; "url":"http://77.111.7.178:8000/app43/build/fw.zip", "version": "app43"}
+    //dobi sporočilo za config update
+    let obj = JSON.parse(msg) || {};
+    print('Dobil sporocilo za firmware update');
+    let url = obj.url;
+    let version = obj.version;
+    RPC.call(RPC.LOCAL, 'Ota.Update', {url: url}, function (resp, ud){
+      print ('Response:', JSON.stringify(resp));
+    }, null);
+    Sys.reboot(60000);
+  }, null);
+
+
 
 
 // starts handlers for html control
@@ -743,11 +760,6 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
           MQTT.pub(topicpubeventshtml, msg, 1);
         }
 
-
-        RPC.call(RPC.LOCAL, 'Ota.Update', {url: "https://storage.cloud.google.com/b-air-6c15b-firmware-ota/fw.zip"}, function (resp, ud){
-          print ('Response:', JSON.stringify(resp));
-      }, null);
-
   });
 
 
@@ -796,6 +808,9 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
     apppwmgra = args.app.pwm.gra;
     apppwmnight = args.app.pwm.night;
   //  appnightspeed = args.app.night.speed;
+    Cfg.set({app: {pwm: {night: apppwmnight}}});
+    Cfg.set({app: {pwm: {gra: apppwmgra}}});
+
 
     print(JSON.stringify(args));
     // če je povezan na strežnik je potrebno configuracijo poslati tudi nazaj na strežnik
@@ -809,6 +824,7 @@ MQTT.sub(topicsubconfig, function(conn, topic, msg) {
   RPC.addHandler('ControlParam1', function(args) {
 
     appnightspeed = args.app.night.speed;
+    Cfg.set({app: {night: {speed: appnightspeed}}});
 
     print(JSON.stringify(args));
     // če je povezan na strežnik je potrebno configuracijo poslati tudi nazaj na strežnik
